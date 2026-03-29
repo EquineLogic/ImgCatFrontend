@@ -9,6 +9,13 @@
 
   const sparkleColors = ['#9061C2', '#ED438D', '#00F5FF', '#FFF34B', '#ffffff', '#c792ea', '#ff79c6'];
 
+  async function handleSignIn(e: SubmitEvent) {
+    e.preventDefault();
+    const res = await fetch('http://localhost:3000/signin', { method: 'POST' });
+    const text = await res.text();
+    console.log(text);
+  }
+
   onMount(() => {
     // Create sparkles
     for (let i = 0; i < 80; i++) {
@@ -110,7 +117,7 @@
     </h1>
 
     <form
-      method="POST"
+      onsubmit={handleSignIn}
       class="w-full max-w-sm bg-white/5 backdrop-blur
              border border-tw-purple/30 rounded-2xl p-8
              flex flex-col gap-5"
