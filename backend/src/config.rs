@@ -1,0 +1,52 @@
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::sync::LazyLock;
+
+/// Global config object
+pub static CONFIG: LazyLock<Config> =
+    LazyLock::new(|| Config::load().expect("Failed to load config"));
+
+#[derive(Serialize, Deserialize)]
+pub struct ObjectStorage {
+    pub endpoint: Option<String>,
+    pub secure: Option<bool>,
+    pub access_key: Option<String>,
+    pub secret_key: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Config {
+    pub max_db_connections: u32,
+    pub postgres_url: String,
+    pub object_storage: ObjectStorage,
+
+    #[serde(skip)]
+    /// Setup by load() for statistics
+    pub start_time: chrono::DateTime<chrono::Utc>,
+}
+
+impl Config {
+    pub fn load() -> Result<Self, crate::Error> {
+        // Open config.yaml from parent directory
+        let file = File::open("config.yaml");
+
+        match file {
+            Ok(file) => {
+                // Parse config.yaml
+                let mut cfg: Config = serde_yaml::from_reader(file)?;
+
+                cfg.start_time = chrono::Utc::now();
+
+                // Return config
+                Ok(cfg)
+            }
+            Err(e) => {
+                // Print error
+                println!("config.yaml could not be loaded: {}", e);
+
+                // Exit
+                std::process::exit(1);
+            }
+        }
+    }
+}
