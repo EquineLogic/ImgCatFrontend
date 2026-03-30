@@ -1,0 +1,7 @@
+backend/target
+backend/config.yaml
+frontend/node_modules
+frontend/build
+frontend/dist
+frontend/.svelte-kit
+frontend/.env

@@ -6,6 +6,7 @@ use axum::{
 };
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
+use log::info;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -17,7 +18,8 @@ pub struct AppData {
 
 #[tokio::main]
 async fn main() {
-    env_logger::builder().init();
+    // setup logging
+    env_logger::builder().filter_level(log::LevelFilter::Info).init();
 
     let reqwest = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(30))
@@ -32,6 +34,8 @@ async fn main() {
         .connect(&cfg.postgres_url)
         .await
         .expect("Could not initialize connection");
+
+    info!("Starting server on http://localhost:3000");
 
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())

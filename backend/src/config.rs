@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 pub static CONFIG: LazyLock<Config> =
     LazyLock::new(|| Config::load().expect("Failed to load config"));
 
+/// For S3->Seaweed
 #[derive(Serialize, Deserialize)]
 pub struct ObjectStorage {
     pub endpoint: Option<String>,
