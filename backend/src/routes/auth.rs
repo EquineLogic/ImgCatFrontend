@@ -1,12 +1,13 @@
 use crate::AppData;
-use crate::models::auth::{RegisterRequest, Session};
+use crate::models::auth::{RegisterRequest, Session, SignInRequest};
 use argon2::{
-    Argon2, PasswordHasher,
-    password_hash::{SaltString, rand_core::OsRng},
+    Argon2, PasswordHasher, PasswordVerifier,
+    password_hash::{PasswordHash, SaltString, rand_core::OsRng},
 };
 use axum::http::StatusCode;
 use axum::{Json, extract::State, response::IntoResponse};
 use sqlx;
+use sqlx::Row;
 
 pub async fn register(
     State(app): State<AppData>,
@@ -59,4 +60,68 @@ fn salt_and_hash_password(password: &str) -> String {
         .hash_password(password.as_bytes(), &salt)
         .unwrap()
         .to_string()
+}
+
+pub async fn sign_in(
+    State(app): State<AppData>,
+    Json(payload): Json<SignInRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let mut tx = app.pool.begin().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Database error: {e}"),
+        )
+    })?;
+
+    // get password hash for the given username
+    let row = sqlx::query("SELECT password FROM users WHERE username = $1")
+        .bind(&payload.username)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Invalid username or password".to_string(),
+            )
+        })?;
+
+    let hashed_password: String = row.get("password");
+
+    // verify password
+    let argon2 = Argon2::default();
+    let parsed_hash = PasswordHash::new(&hashed_password).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to parse password hash".to_string(),
+        )
+    })?;
+
+    argon2
+        .verify_password(payload.password.as_bytes(), &parsed_hash)
+        .map_err(|_| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Invalid username or password".to_string(),
+            )
+        })?;
+
+    // create session
+
+    let session = Session::new(&mut *tx, payload.username)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to create session: {e}"),
+            )
+        })?;
+
+    tx.commit().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Database error: {e}"),
+        )
+    })?;
+
+    Ok((StatusCode::OK, Json(session)))
 }

@@ -51,6 +51,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(|| async { "Hello, World!" }))
         .route("/register", post(routes::auth::register))
+        .route("/signin", post(routes::auth::sign_in))
         .with_state(AppData { pool, reqwest })
         .layer(cors);
 

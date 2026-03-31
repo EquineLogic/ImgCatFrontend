@@ -2,28 +2,6 @@
 	import IntroAnimation from '$lib/components/IntroAnimation.svelte';
 
 	let introComplete = $state(false);
-	let message = $state('');
-	let isError = $state(false);
-
-	async function handleRegister(e: SubmitEvent) {
-		e.preventDefault();
-		const form = e.target as HTMLFormElement;
-		const formData = new FormData(form);
-
-		const res = await fetch('http://localhost:3000/register', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				username: formData.get('username'),
-				name: formData.get('name'),
-				password: formData.get('password')
-			})
-		});
-
-		const text = await res.text();
-		message = text;
-		isError = !res.ok;
-	}
 </script>
 
 <IntroAnimation bind:visible={introComplete} />
@@ -40,70 +18,35 @@
 			ImgCat
 		</h1>
 
-		<form
-			onsubmit={handleRegister}
+		<div
 			class="w-full max-w-sm bg-white/5 backdrop-blur
              border border-tw-purple/30 rounded-2xl p-8
-             flex flex-col gap-5"
+             flex flex-col gap-5 items-center"
 		>
-			<h2 class="text-tw-neon text-xl font-semibold text-center">Register</h2>
+			<p class="text-tw-neon text-xl font-semibold text-center">Welcome</p>
+			<p class="text-white/60 text-sm text-center">Share images with the magic of friendship</p>
 
-			<label class="flex flex-col gap-1">
-				<span class="text-tw-yellow text-sm">Username</span>
-				<input
-					type="text"
-					name="username"
-					required
-					placeholder="twilight_sparkle"
-					class="rounded-lg px-4 py-2.5 bg-tw-darkblue/80
-                 border border-tw-purple/40 text-white
-                 placeholder:text-white/30
-                 focus:outline-none focus:ring-2 focus:ring-tw-neon"
-				/>
-			</label>
+			<a
+				href="/signin"
+				class="w-full text-center rounded-lg py-2.5 font-semibold text-white
+                   bg-tw-purple hover:bg-tw-pink cursor-pointer
+                   transition-colors duration-200
+                   focus:outline-none focus:ring-2 focus:ring-tw-neon"
+			>
+				Sign In
+			</a>
 
-			<label class="flex flex-col gap-1">
-				<span class="text-tw-yellow text-sm">Display Name</span>
-				<input
-					type="text"
-					name="name"
-					required
-					placeholder="Twilight Sparkle"
-					class="rounded-lg px-4 py-2.5 bg-tw-darkblue/80
-                 border border-tw-purple/40 text-white
-                 placeholder:text-white/30
-                 focus:outline-none focus:ring-2 focus:ring-tw-neon"
-				/>
-			</label>
-
-			<label class="flex flex-col gap-1">
-				<span class="text-tw-yellow text-sm">Password</span>
-				<input
-					type="password"
-					name="password"
-					required
-					placeholder="********"
-					class="rounded-lg px-4 py-2.5 bg-tw-darkblue/80
-                 border border-tw-purple/40 text-white
-                 placeholder:text-white/30
-                 focus:outline-none focus:ring-2 focus:ring-tw-neon"
-				/>
-			</label>
-
-			<button
-				type="submit"
-				class="mt-2 rounded-lg py-2.5 font-semibold text-white
-               bg-tw-purple hover:bg-tw-pink cursor-pointer
-               transition-colors duration-200
-               focus:outline-none focus:ring-2 focus:ring-tw-neon"
+			<a
+				href="/register"
+				class="w-full text-center rounded-lg py-2.5 font-semibold
+                   text-tw-neon border border-tw-neon/40
+                   hover:bg-tw-neon/10 cursor-pointer
+                   transition-colors duration-200
+                   focus:outline-none focus:ring-2 focus:ring-tw-neon"
 			>
 				Register
-			</button>
-
-			{#if message}
-				<p class="text-sm text-center {isError ? 'text-red-400' : 'text-green-400'}">{message}</p>
-			{/if}
-		</form>
+			</a>
+		</div>
 	</div>
 </div>
 
@@ -114,7 +57,6 @@
 		background-color: #172757;
 	}
 
-	/* Main content fade in */
 	.main-content {
 		opacity: 0;
 		transition: opacity 1s ease-in;

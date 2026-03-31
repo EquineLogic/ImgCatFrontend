@@ -1,6 +1,6 @@
 use chrono::Utc;
 use rand::distr::Alphanumeric;
-use rand::{Rng, distr::SampleString, rng};
+use rand::{distr::SampleString, rng};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -9,6 +9,12 @@ pub struct RegisterRequest {
     pub username: String,
     pub password: String,
     pub name: String,
+}
+
+#[derive(Deserialize)]
+pub struct SignInRequest {
+    pub username: String,
+    pub password: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -27,7 +33,7 @@ impl Session {
         // method is generic over either pool or transaction executor
         E: sqlx::Executor<'c, Database = sqlx::Postgres>,
     {
-        let token: String = Alphanumeric.sample_string(&mut rand::rng(), Self::TOKEN_LENGTH);
+        let token: String = Alphanumeric.sample_string(&mut rng(), Self::TOKEN_LENGTH);
 
         sqlx::query("INSERT INTO sessions (username, token, expires_at) VALUES ($1, $2, $3)")
             .bind(&username)
