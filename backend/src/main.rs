@@ -1,25 +1,31 @@
 mod config;
+mod models;
+mod routes;
+
 use axum::{
-    routing::{get, post},
-    http::{HeaderValue, Method},
     Router,
+    http::{HeaderValue, Method},
+    routing::{get, post},
 };
+use log::info;
+use reqwest::header;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
-use log::info;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
 #[derive(Clone)]
 pub struct AppData {
     pool: sqlx::PgPool,
-    reqwest: reqwest::Client
+    reqwest: reqwest::Client,
 }
 
 #[tokio::main]
 async fn main() {
     // setup logging
-    env_logger::builder().filter_level(log::LevelFilter::Info).init();
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
 
     let reqwest = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(30))
@@ -39,19 +45,15 @@ async fn main() {
 
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
-        .allow_methods([Method::POST]);
+        .allow_methods([Method::POST])
+        .allow_headers([header::CONTENT_TYPE]);
 
     let app = Router::new()
         .route("/", get(|| async { "Hello, World!" }))
-        .route("/signin", post(signin))
+        .route("/register", post(routes::auth::register))
         .with_state(AppData { pool, reqwest })
         .layer(cors);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
-}
-
-async fn signin() -> &'static str {
-    println!("Hello World");
-    "Hello World"
 }
