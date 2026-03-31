@@ -1,5 +1,5 @@
 use crate::AppData;
-use crate::models::auth::RegisterRequest;
+use crate::models::auth::{RegisterRequest, Session};
 use argon2::{
     Argon2, PasswordHasher,
     password_hash::{SaltString, rand_core::OsRng},
@@ -14,22 +14,42 @@ pub async fn register(
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let hashed_password = salt_and_hash_password(&payload.password);
 
-    sqlx::query("INSERT INTO users (username, name, password) VALUES ($1, $2, $3)")
+    let mut tx = app.pool.begin().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Database error: {e}"),
+        )
+    })?;
+
+    let res = sqlx::query("INSERT INTO users (username, name, password) VALUES ($1, $2, $3) ON CONFLICT (username) DO NOTHING")
         .bind(&payload.username)
         .bind(&payload.name)
         .bind(&hashed_password)
-        .execute(&app.pool)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {e}")))?;
+
+    if res.rows_affected() == 0 {
+        return Err((StatusCode::CONFLICT, "Username already exists".to_string()));
+    }
+
+    let session = Session::new(&mut *tx, payload.username)
         .await
         .map_err(|e| {
-            if let sqlx::Error::Database(ref db_err) = e {
-                if db_err.code().as_deref() == Some("23505") {
-                    return (StatusCode::CONFLICT, "Username already exists".to_string());
-                }
-            }
-            (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {e}"))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to create session: {e}"),
+            )
         })?;
 
-    Ok((StatusCode::OK, "User registered successfully".to_string()))
+    tx.commit().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Database error: {e}"),
+        )
+    })?;
+
+    Ok((StatusCode::CREATED, Json(session)))
 }
 
 fn salt_and_hash_password(password: &str) -> String {

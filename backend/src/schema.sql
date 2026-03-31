@@ -1,7 +1,7 @@
 create table users (username text primary key, name text not null, password text not null);
 
 create extension "uuid-ossp";
-create table sessions (id uuid primary key default uuid_generate_v4(), username text not null references users(username), token text not null);
+create table sessions (id uuid primary key default uuid_generate_v4(), username text not null references users(username), token text not null, created_at timestamptz default now(), expires_at timestamptz not null);
 CREATE EXTENSION ltree;
 CREATE TYPE entry_type AS ENUM ('file', 'folder');
 CREATE TABLE filesystem (
