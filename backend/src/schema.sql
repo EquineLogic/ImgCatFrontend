@@ -51,6 +51,8 @@ CREATE TABLE filesystem (
     
     path LTREE, -- The UUID-based fast query path for Postgres
     
+    sort_order INTEGER NOT NULL DEFAULT 0,
+
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,
@@ -109,3 +111,6 @@ CREATE INDEX idx_filesystem_parent_id ON filesystem (parent_id);
 
 -- Speed up reverse lookups (e.g., "Find all folders containing this image")
 CREATE INDEX idx_filesystem_file_id ON filesystem (file_id);
+
+-- Speed up ordered directory listings
+CREATE INDEX idx_filesystem_sort ON filesystem (parent_id, sort_order);

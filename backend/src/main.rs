@@ -7,7 +7,6 @@ use axum::{
     http::{HeaderValue, Method},
     routing::{get, post},
 };
-use log::info;
 use reqwest::header;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::CorsLayer;
@@ -17,8 +16,8 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Clone)]
 pub struct AppData {
     pool: sqlx::PgPool,
-    reqwest: reqwest::Client,
-    //s3: aws_sdk_s3::Client,
+    s3: aws_sdk_s3::Client,
+    bucket: String,
 }
 
 #[tokio::main]
@@ -28,12 +27,6 @@ async fn main() {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    let reqwest = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(30))
-        .timeout(std::time::Duration::from_secs(90))
-        .build()
-        .expect("Could not initialize reqwest client");
-
     let cfg = &*config::CONFIG;
 
     let pool = PgPoolOptions::new()
@@ -42,7 +35,25 @@ async fn main() {
         .await
         .expect("Could not initialize connection");
 
-    info!("Starting server on http://localhost:3000");
+    let s3_config = aws_sdk_s3::Config::builder()
+        .endpoint_url(cfg.object_storage.endpoint.as_deref().unwrap())
+        .credentials_provider(aws_sdk_s3::config::Credentials::new(
+            cfg.object_storage.access_key.as_deref().unwrap(),
+            cfg.object_storage.secret_key.as_deref().unwrap(),
+            None,
+            None,
+            "Static",
+        ))
+        .region(aws_sdk_s3::config::Region::new("us-east-1"))
+        .force_path_style(true)
+        .behavior_version_latest()
+        .build();
+
+    let s3 = aws_sdk_s3::Client::from_conf(s3_config);
+
+    let bucket = cfg.object_storage.bucket.clone().unwrap();
+
+    log::info!("Starting server on http://localhost:3000");
 
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
@@ -61,7 +72,10 @@ async fn main() {
         .route("/delete_folder", post(routes::filesystem::delete_folder))
         .route("/rename_folder", post(routes::filesystem::rename_folder))
         .route("/upload_file", post(routes::filesystem::upload_file))
-        .with_state(AppData { pool, reqwest })
+        .route("/list_files", get(routes::filesystem::list_files))
+        .route("/files/{id}", get(routes::filesystem::get_file))
+        .route("/reorder", post(routes::filesystem::reorder))
+        .with_state(AppData { pool, s3, bucket })
         .layer(cors);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();

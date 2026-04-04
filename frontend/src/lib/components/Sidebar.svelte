@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import Modal from './Modal.svelte';
 	import { fetchFolders, currentFolderId } from '$lib/stores/folders';
+	import { fetchFiles } from '$lib/stores/files';
 
 	const MIN_W = 72;
 	const MAX_W = 240;
@@ -18,6 +19,7 @@
 	let showUpload = $state(false);
 	let uploadFile: File | null = $state(null);
 	let uploadPreview: string | null = $state(null);
+	let uploadName = $state('');
 	let uploadError = $state('');
 	let uploading = $state(false);
 
@@ -65,8 +67,11 @@
 		uploadFile = file;
 		if (file) {
 			uploadPreview = URL.createObjectURL(file);
+			// Strip extension for a cleaner default name (e.g. "cat.png" -> "cat")
+			uploadName = file.name.replace(/\.[^.]+$/, '');
 		} else {
 			uploadPreview = null;
+			uploadName = '';
 		}
 	}
 
@@ -76,6 +81,7 @@
 		uploadError = '';
 		const form = new FormData();
 		form.append('file', uploadFile);
+		form.append('name', uploadName.trim() || uploadFile.name);
 		if ($currentFolderId) form.append('parent_id', $currentFolderId);
 		try {
 			const res = await fetch('http://localhost:3000/upload_file', {
@@ -89,9 +95,10 @@
 			}
 			uploadFile = null;
 			uploadPreview = null;
+			uploadName = '';
 			uploadError = '';
 			showUpload = false;
-			await fetchFolders();
+			await fetchFiles();
 		} catch (e) {
 			uploadError = 'Upload failed';
 		} finally {
@@ -369,6 +376,19 @@
 				<span class="text-sm text-white/30">Click to select an image</span>
 			{/if}
 			<input type="file" accept="image/*" onchange={onFileSelect} class="hidden" />
+		</label>
+
+		<label class="flex flex-col gap-1">
+			<span class="text-tw-yellow text-sm">Name</span>
+			<input
+				type="text"
+				bind:value={uploadName}
+				placeholder="Image name"
+				class="rounded-lg px-4 py-2.5 bg-tw-darkblue/80
+				       border border-tw-purple/40 text-white
+				       placeholder:text-white/30
+				       focus:outline-none focus:ring-2 focus:ring-tw-neon"
+			/>
 		</label>
 
 		{#if uploadError}

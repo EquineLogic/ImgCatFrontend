@@ -13,6 +13,7 @@ pub struct ObjectStorage {
     pub secure: Option<bool>,
     pub access_key: Option<String>,
     pub secret_key: Option<String>,
+    pub bucket: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]

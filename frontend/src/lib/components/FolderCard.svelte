@@ -78,7 +78,7 @@
 <button
 	onclick={handleClick}
 	oncontextmenu={onContextMenu}
-	class="group flex flex-col items-center gap-3 p-5 rounded-2xl
+	class="group flex items-center gap-3 px-4 py-3 rounded-xl
 	       bg-white/5 border border-white/10
 	       hover:bg-tw-purple/10 hover:border-tw-purple/30
 	       cursor-pointer transition-all duration-200"
@@ -91,11 +91,11 @@
 		stroke-width="1.5"
 		stroke-linecap="round"
 		stroke-linejoin="round"
-		class="w-12 h-12 text-tw-yellow/60 group-hover:text-tw-yellow transition-colors duration-200"
+		class="w-6 h-6 shrink-0 text-tw-yellow/60 group-hover:text-tw-yellow transition-colors duration-200"
 	>
 		<path d="M2 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" />
 	</svg>
-	<span class="text-sm text-white/70 group-hover:text-white truncate max-w-full transition-colors duration-200">
+	<span class="text-sm text-white/70 group-hover:text-white truncate transition-colors duration-200">
 		{name}
 	</span>
 </button>
