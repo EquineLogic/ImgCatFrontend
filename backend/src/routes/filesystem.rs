@@ -1,9 +1,14 @@
 use crate::AppData;
 use crate::models::auth::LoggedInUser;
-use crate::models::filesystem::{DeleteFolder, Folder, ListFoldersParams, NewFolder, RenameFolder};
-use axum::extract::Query;
-use axum::http::StatusCode;
-use axum::{Json, extract::State, response::IntoResponse};
+use crate::models::filesystem::{
+    DeleteFolder, Folder, ListFoldersParams, NewFile, NewFolder, RenameFolder,
+};
+use axum::{
+    Json,
+    extract::{Multipart, Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use sqlx::Row;
 
 pub async fn create_folder(
@@ -112,4 +117,67 @@ pub async fn rename_folder(
     }
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn upload_file(
+    State(app): State<AppData>,
+    user: LoggedInUser,
+    multipart: Multipart,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let payload = NewFile::from_multipart(multipart).await?;
+
+    let mut tx = app.pool.begin().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Database error: {e}"),
+        )
+    })?;
+
+    let f_row = sqlx::query("INSERT INTO files (owner_username, s3_fileid, size_bytes, mime_type) VALUES ($1, $2, $3, $4) RETURNING id")
+        .bind(&user.username)
+        .bind("placeholder_s3_id") // TODO: Upload to S3 and get real ID
+        .bind(payload.data.len() as i64)
+        .bind(&payload.mime_type)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Database error: {e}"),
+            )
+        })?;
+
+    // don't have to check if rows b/c of fetch_one
+
+    let f_id: uuid::Uuid = f_row.get("id");
+
+    let fs_row = sqlx::query("INSERT INTO filesystem (name, type, owner_username, parent_id, file_id) VALUES ($1, 'file_link', $2, $3, $4)")
+        .bind(&payload.name)
+        .bind(&user.username)
+        .bind(payload.parent_id)
+        .bind(f_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Database error: {e}"),
+            )
+        })?;
+
+    if fs_row.rows_affected() == 0 {
+        return Err((
+            StatusCode::CONFLICT,
+            "A file with that name already exists".to_string(),
+        ));
+    }
+
+    tx.commit().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Database error: {e}"),
+        )
+    })?;
+
+    Ok(StatusCode::CREATED)
 }

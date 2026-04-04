@@ -1,41 +1,90 @@
-create table users (username text primary key, name text not null, password text not null);
+-- 1. EXTENSIONS
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "ltree";
 
-create extension "uuid-ossp";
-create table sessions (id uuid primary key default uuid_generate_v4(), username text not null references users(username), token text not null, created_at timestamptz default now(), expires_at timestamptz not null);
-CREATE EXTENSION ltree;
-CREATE TYPE entry_type AS ENUM ('file', 'folder');
+-- 2. AUTHENTICATION TABLES (Users & Sessions)
+CREATE TABLE users (
+    username TEXT PRIMARY KEY, 
+    name TEXT NOT NULL, 
+    password TEXT NOT NULL
+);
+
+CREATE TABLE sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(), 
+    username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE, 
+    token TEXT NOT NULL, 
+    created_at TIMESTAMPTZ DEFAULT NOW(), 
+    expires_at TIMESTAMPTZ NOT NULL
+);
+
+
+-- 3. FILESYSTEM TYPES
+-- 'folder' represents a directory.
+-- 'file_link' represents a hardlink pointing to the actual image data.
+CREATE TYPE entry_type AS ENUM ('folder', 'file_link');
+
+-- 4. THE DATA TABLE (Inodes / SeaweedFS Pointers)
+-- This table holds the actual physical file data. No names, no hierarchy here.
+CREATE TABLE files (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    owner_username TEXT NOT NULL REFERENCES users(username) ON UPDATE CASCADE,
+    
+    s3_fileid TEXT NOT NULL, 
+    size_bytes BIGINT DEFAULT 0 CHECK (size_bytes <= 100000000), -- e.g., 100MB limit
+    mime_type TEXT NOT NULL,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. THE HIERARCHY TABLE (Dentries / Folders & Shortcuts)
+-- This table creates the folder structure and links names to the file data.
 CREATE TABLE filesystem (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name TEXT NOT NULL,
-    type entry_type NOT NULL,
-    owner_username TEXT NOT NULL REFERENCES users(username) ON UPDATE CASCADE,
-    parent_id UUID REFERENCES filesystem(id) ON DELETE RESTRICT,
-    path LTREE,
+    parent_id UUID REFERENCES filesystem(id) ON DELETE CASCADE,
     
-    size_bytes BIGINT DEFAULT 0 CHECK (size_bytes <= 1000000),
-    s3_fileid TEXT,
-    mime_type TEXT,
+    name TEXT NOT NULL, -- User-facing name (spaces, emojis, etc. are safe here)
+    type entry_type NOT NULL,
+    
+    -- Points to the actual file. MUST be NULL if this row is a folder.
+    file_id UUID REFERENCES files(id) ON DELETE RESTRICT, 
+    owner_username TEXT NOT NULL REFERENCES users(username) ON UPDATE CASCADE,
+    
+    path LTREE, -- The UUID-based fast query path for Postgres
+    
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,
 
-    CONSTRAINT unique_name_per_folder UNIQUE (parent_id, name)
+    -- Prevent duplicate names in the same exact folder
+    CONSTRAINT unique_name_per_folder UNIQUE (parent_id, name),
+    
+    -- Ensure folders don't point to files, and file_links ALWAYS point to files
+    CONSTRAINT check_hardlink_logic CHECK (
+        (type = 'folder' AND file_id IS NULL) OR 
+        (type = 'file_link' AND file_id IS NOT NULL)
+    )
 );
 
+
+-- 6. LTREE PATH GENERATION LOGIC (UUID Based)
 CREATE OR REPLACE FUNCTION update_filesystem_path() RETURNS TRIGGER AS $$
 DECLARE
     parent_path LTREE;
+    formatted_id TEXT;
 BEGIN
-    -- Find the parent's path
+    -- Format UUID for ltree (ltree doesn't allow hyphens, so we swap them for underscores)
+    formatted_id := replace(NEW.id::text, '-', '_');
+
+    -- Build the new path
     IF NEW.parent_id IS NULL THEN
-        NEW.path = regexp_replace(replace(NEW.name, ' ', '_'), '[^a-zA-Z0-9_]', '', 'g')::ltree;
+        NEW.path = formatted_id::ltree;
     ELSE
         SELECT path INTO parent_path FROM filesystem WHERE id = NEW.parent_id;
-        NEW.path = parent_path || regexp_replace(replace(NEW.name, ' ', '_'), '[^a-zA-Z0-9_]', '', 'g')::ltree;
+        NEW.path = parent_path || formatted_id::ltree;
     END IF;
 
-    -- If the path actually changed, update all descendants
-    IF (TG_OP = 'UPDATE') AND (OLD.path IS DISTINCT FROM NEW.path) THEN
+    -- Only cascade updates to descendants if the item was physically MOVED to a new folder
+    IF (TG_OP = 'UPDATE') AND (OLD.parent_id IS DISTINCT FROM NEW.parent_id) THEN
         UPDATE filesystem 
         SET path = NEW.path || subpath(path, nlevel(OLD.path))
         WHERE path <@ OLD.path AND id != OLD.id;
@@ -49,9 +98,14 @@ CREATE TRIGGER trg_update_path
 BEFORE INSERT OR UPDATE ON filesystem
 FOR EACH ROW EXECUTE FUNCTION update_filesystem_path();
 
-ALTER TABLE filesystem
-ADD CONSTRAINT check_file_storage_id
-CHECK (
-    (type = 'folder' AND s3_fileid IS NULL) OR 
-    (type = 'file' AND s3_fileid IS NOT NULL AND s3_fileid <> '')
-);
+
+-- 7. INDEXES (Crucial for Performance)
+
+-- GiST index on the ltree column is mandatory for lightning-fast tree queries
+CREATE INDEX idx_filesystem_path ON filesystem USING GIST (path);
+
+-- Speed up standard directory listing (e.g., SELECT * WHERE parent_id = '...')
+CREATE INDEX idx_filesystem_parent_id ON filesystem (parent_id);
+
+-- Speed up reverse lookups (e.g., "Find all folders containing this image")
+CREATE INDEX idx_filesystem_file_id ON filesystem (file_id);

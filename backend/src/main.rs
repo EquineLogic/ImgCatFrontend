@@ -18,6 +18,7 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub struct AppData {
     pool: sqlx::PgPool,
     reqwest: reqwest::Client,
+    //s3: aws_sdk_s3::Client,
 }
 
 #[tokio::main]
@@ -59,6 +60,7 @@ async fn main() {
         .route("/list_folders", get(routes::filesystem::list_folders))
         .route("/delete_folder", post(routes::filesystem::delete_folder))
         .route("/rename_folder", post(routes::filesystem::rename_folder))
+        .route("/upload_file", post(routes::filesystem::upload_file))
         .with_state(AppData { pool, reqwest })
         .layer(cors);
 
